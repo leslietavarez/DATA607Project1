@@ -1,0 +1,119 @@
+---
+title: "DATA 607 Project 1"
+author: "Leslie Tavarez"
+date: "2024-10-06"
+output: html_document
+---
+##### Introduction: In this project, we are given a text file with chess tournament results. This text file has a specific structure. Our goal is to create an R Markdown file that generates a .CSV file with the following info for all of the players: "Player’s Name, Player’s State, Total Number of Points, Player’s Pre-Rating, and Average Pre Chess Rating of Opponents". First, I will load all necessary libraries and attempt to clean the data as much as I can. 
+
+
+
+```{r}
+library(dplyr)
+library(readr)
+library(stringr)
+
+
+# Read the data without headers
+raw_data <- read.table("/Users/leslie/Downloads/tournamentinfo.txt", 
+                       sep = "|", 
+                       fill = TRUE, 
+                       stringsAsFactors = FALSE)
+
+# Check the structure of the raw data
+str(raw_data)
+
+# Initial column assignment
+colnames(raw_data) <- c("Pair_Num", "Player_Name", "Total", "Round_1", "Round_2", "Round_3", "Round_4", "Round_5", "Round_6", "Round_7")
+
+# Remove the first four rows using indexing
+raw_data <- raw_data[-c(1:4), ]
+
+# Remove the last column if it contains only NA values
+if (all(is.na(raw_data[, ncol(raw_data)]))) {
+  raw_data <- raw_data[, -ncol(raw_data)]
+}
+
+# Remove rows that contain only dashes
+raw_data <- raw_data[!grepl("^\\s*-{2,}\\s*$", raw_data$Pair_Num), ]
+
+View(raw_data)
+```
+##### Now I am going to calulate the average opponent rating, extract necessary information like player name, player state, total points and pre-rating and save into csv file. 
+```{r}
+# Function to calculate average opponent rating
+calculate_average_opponent_rating <- function(rounds) {
+  opponent_ratings <- as.numeric(unlist(str_extract_all(rounds, "\\d+")))
+  mean(opponent_ratings, na.rm = TRUE)
+}
+
+# Extract Player's State and Pre-Rating from Player_Name
+extract_player_info <- function(name) {
+  parts <- str_split(name, "\\s+/\\s+")[[1]]
+  state <- str_trim(parts[1])
+  rating_info <- str_extract(parts[2], "\\d+ -> \\d+")
+  pre_rating <- as.numeric(str_extract(rating_info, "\\d+"))
+  return(c(state, pre_rating))
+}
+
+# Create an empty data frame for results
+results <- data.frame(
+  Player_Name = character(),
+  Player_State = character(),
+  Total_Points = numeric(),
+  Pre_Rating = numeric(),
+  Average_Opponent_Rating = numeric(),
+  stringsAsFactors = FALSE
+)
+# Clean the Total column
+raw_data$Total <- gsub("\\s+", "", raw_data$Total)  # Remove extra whitespace
+raw_data$Total <- gsub("[^0-9.]", "", raw_data$Total)  # Remove non-numeric characters
+
+# Convert to numeric, suppress warnings
+raw_data$Total <- suppressWarnings(as.numeric(raw_data$Total))
+
+sum(is.na(raw_data$Total))
+
+
+
+# Loop through each player
+for (i in 1:nrow(raw_data)) {
+  player_name <- raw_data$Player_Name[i]
+
+# Use the cleaned Total value
+  total_points <- raw_data$Total[i]
+  
+# Extract Player's State from Pair_Num (two capital letters)
+  player_state <- str_extract(raw_data$Pair_Num[i], "[A-Z]{2}")
+  
+# Extract Pre-Rating from Player_Name
+  pre_rating_match <- str_extract(player_name, "R:\\s*(\\d+)")
+  pre_rating <- as.numeric(str_extract(pre_rating_match, "\\d+"))
+  
+# Get total points (ensure it's numeric)
+  total_points <- as.numeric(raw_data$Total[i])
+  
+# Calculate average opponent rating
+  rounds <- unlist(raw_data[i, 4:ncol(raw_data)])
+  avg_opponent_rating <- calculate_average_opponent_rating(rounds[!is.na(rounds)])
+ 
+
+  
+  # Add to results data frame
+  results <- rbind(results, data.frame(
+    Player_Name = player_name,
+    Player_State = player_state,
+    Total_Points = total_points,
+    Pre_Rating = pre_rating,
+    Average_Opponent_Rating = avg_opponent_rating
+  ))
+}
+ 
+
+View(results)
+
+# Save the results to a CSV file
+write.csv(results, "chess_tournament_results.csv", row.names = FALSE)
+```
+
+##### Conclusion: I was able to load the text file, clean it up a little, and create a csv file. But now I have this problem were I still have data I do not need in my results. Ive tried to remove the USCF ID/ Rtg (Pre->Post) but whenever I do, it messes up my column with the pre-rating. This is leading to extra rows that I do not need with "NA" values. I cannot remove entire row with "NA" or "NaN" because it still has important information that I cannot remove from my data table. I've tried many different things and nothing has worked. I am not sure what else to do here. 
